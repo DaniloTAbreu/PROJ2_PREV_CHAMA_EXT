@@ -1,0 +1,810 @@
+---
+title: "Projeto2"
+author: "Danilo Temerloglou de Abreu"
+date: '`r format(Sys.Date(), "%A, %d de %B de %Y")`'
+output:
+   html_document:
+      highlight: textmate
+      theme: flatly
+      number_sections: yes
+      toc: yes
+      toc_float:
+        collapsed: yes
+        smooth_scroll: no
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Definindo o problema de negócio
+
+Construir um modelo de Machine Learning capaz de prever, com base em 
+novos dados, se a chama será extinta ou não ao usar um extintor de incêndio
+
+# Decisões
+
+O problema de negócio já informa queé requerido um modelo de Machine Learning. 
+No dataset temos a coluna "STATUS" que é a variável que queremos prever. 
+Desta forma, iremos utilizar aprendizagem supervisionada.
+Falta definir pré processamento.
+O trabalho será entregue de duas formas, a saber: gráfico e tabela.
+
+
+# Definindo o diretório de trabalho
+
+```{r}
+setwd("C:/Users/Chilov/FCD/PROJETOS/PROJETO2")
+getwd()
+```
+
+# Instalando os pacotes
+
+```{r}
+#install.packages("caret")
+#install.packages("ROCR")
+#install.packages("e1071")
+#install.packages("readxl")
+#install.packages("corrplot")
+#install.packages("dplyr")
+#install.packages("car")
+#install.packages("ggplot2")
+#install.packages("caTools")
+#install.packages("randomForest")
+#install.packages("gains")
+#install.packages("pROC")
+#install.packages("rpart")
+#install.packages("xgboost")
+#install.packages("neuralnet")
+#install.packages("fastDummies")
+#install.packages("Matrix")
+#install.packages("gmodels")
+```
+
+# Carregando os pacotes
+
+```{r}
+suppressWarnings({
+library(caret) #permite a métrica matriz de confusão
+library(ROCR) #permite métrica ROCR
+library(e1071) #para modelo SVM
+library(readxl) #permite leitura de arquivo excel
+library(corrplot)#permite gráfico de correlação
+library(dplyr) #pré processamento de dados
+library(car) #para VIF
+library(ggplot2) #permite gráficos
+library(caTools) #permite métrica xxxx
+library(randomForest)#para modelo Random Forest
+library(gains) #Constrói tabelas de ganhos e gráficos de elevação para algoritmos #de previsão
+library(pROC)#permite métrica ROC
+library(rpart) #para modelo Random Forest 
+library(xgboost)#para modelo XGBOOST
+library(neuralnet) #para modelo de Redes Neurais
+library(fastDummies) #para criar variáveis Dummy
+library(Matrix) #para transformar em matriz
+library(gmodels) #permite criar tabela comparando variáveis categóricas  
+})
+```
+
+# Dicionário de dados
+
+```{r}
+#[1] "SIZE" - tamanho da lata de combustível líquido                      
+#[2] "FUEL" - combustível                               
+#[3] "DISTANCE" - distância em que a lata de combustível foi movida (cm)        
+#[4] "DESIBEL" - intensidade do som (dB)         
+#[5] "AIRFLOW" -  fluxo de ar (m/s)                   
+#[6] "FREQUENCY" - frequência (Hz)                  
+#[7] "STATUS" - status (0 chama não extinta e 1 chama extinta) 
+
+#Variável target está coluna 7
+```
+
+# Carregando o dataset e convertendo em dataframe
+
+```{r}
+df_original <- read_excel("Acoustic_Extinguisher_Fire_Dataset.xlsx", sheet = "A_E_Fire_Dataset")
+#visualiza primeiras linhas
+head(df_original)
+#visualiza resumo estatístico
+summary(df_original)
+#outra forma de visualizar nomes das colunas e valores
+str(df_original)
+#nomes das colunas
+names(df_original)
+#dimensões do dataframe
+dim(df_original)
+#visualiza dados em forma de tabela
+View(df_original)
+
+#vamos acertar os tipos de variáveis
+# é informado que as colunas status e combustível são categóricos
+
+df_original$FUEL <- as.factor(df_original$FUEL)  
+df_original$STATUS <- as.factor(df_original$STATUS) 
+str(df_original)
+
+#visualiza variável target
+df_original["STATUS"]
+```
+
+# EDA Análise exploratória de dados
+## Verificar valores duplicados
+```{r}
+sum(duplicated(df_original))
+#não há valores duplicados
+```
+
+## Verificar valores missing
+```{r}
+sapply(df_original, function(y) sum(is.na(y)))
+#não há dados missing
+```
+
+## Explorando as variáveis numéricas de interesse
+
+
+```{r}
+# Vamos separar variáveis numéricas e categóricas
+dados_num <- df_original[,!unlist(lapply(df_original, is.factor))]
+dim(dados_num)
+dados_fator <- df_original[,unlist(lapply(df_original, is.factor))]
+dim(dados_fator)
+
+
+# Análise univariada
+
+# SIZE
+# Boxplot 
+boxplot(dados_num$SIZE, main = "Boxplot para Tamanho da lata de combustível líquido")
+#aparentemente sem valores outliers
+range(dados_num$SIZE)#vai de 1 a 5
+unique(dados_num$SIZE)
+range(dados_num$SIZE)
+unique(dados_num$SIZE)
+dim(dados_num)
+#calculando outras métricas
+round (median(dados_num$SIZE),2) #mediana 3
+round (mean(dados_num$SIZE),2) #média 3
+round (sd (dados_num$SIZE), 2) #desvio padrão 1.41
+round (var (dados_num$SIZE), 2) #variância 2
+# Histograma
+hist(dados_num$SIZE,main = "Histograma para Tamanho da lata de combustível líquido")
+#Ótimo. Variável totalmente balanceada.
+#contagem de cada tamanho
+dados_num %>%
+  count(SIZE)
+
+
+
+# DISTANCE
+# Boxplot 
+boxplot(dados_num$DISTANCE, main = "Boxplot para distância em que a lata de combustível foi movida")
+#aparentemente sem valores outliers
+range(dados_num$DISTANCE)#vai de 10 a 190
+#calculando outras métricas
+round (median(dados_num$DISTANCE),2) #mediana 100
+round (mean(dados_num$DISTANCE),2) #média 100
+round (sd (dados_num$DISTANCE), 2) #desvio padrão 54,77
+round (var (dados_num$DISTANCE), 2) #variância 3000,19
+# Histograma
+hist(dados_num$DISTANCE,main = "Histograma para distância em que a lata de combustível foi movida")
+length(unique(dados_num$DISTANCE))
+#contagem de cada distância
+dados_num %>%
+  count(DISTANCE)
+
+
+# DESIBEL
+# Boxplot 
+boxplot(dados_num$DESIBEL, main = "Boxplot para Intensidade do som")
+#aparentemente sem valores outliers
+range(dados_num$DESIBEL)#vai de 72 a 113
+#calculando outras métricas
+round (median(dados_num$DESIBEL),2) #mediana 95
+round (mean(dados_num$DESIBEL),2) #média 96.38
+round (sd (dados_num$DESIBEL), 2) #desvio padrão 8.16 
+round (var (dados_num$DESIBEL), 2) #variância 66.65
+# Histograma
+hist(dados_num$DESIBEL,main = "Histograma para Intensidade do som")
+#Bastante variação entre os valores
+#contagem de cada intensidade sonora
+dados_num %>%
+  count(DESIBEL)
+
+# AIRFLOW
+# Boxplot
+boxplot(dados_num$AIRFLOW, main = "Boxplot para Fluxo de ar")
+#aparentemente sem valores outliers
+range(dados_num$AIRFLOW)#vai de 0 a 17
+#calculando outras métricas
+round (median(dados_num$AIRFLOW),2) #mediana 5,8
+round (mean(dados_num$AIRFLOW),2) #média 6,98
+round (sd (dados_num$AIRFLOW), 2) #desvio padrão 4,74 
+round (var (dados_num$AIRFLOW), 2) #variância 22,43
+# Histograma
+hist(dados_num$AIRFLOW,main = "Histograma para Fluxo de ar")
+#Bastante variação entre os valores
+#contagem de cada fluxo de ar
+dados_num %>%
+  count(AIRFLOW)
+
+# FREQUENCY
+# Boxplot
+boxplot(dados_num$FREQUENCY, main = "Boxplot para Frequência (Hz)")
+#aparentemente sem valores outliers
+range(dados_num$FREQUENCY)#vai de 1 a 75
+#calculando outras métricas
+round (median(dados_num$FREQUENCY),2) #mediana 27,5
+round (mean(dados_num$FREQUENCY),2) #média 31,61
+round (sd (dados_num$FREQUENCY), 2) #desvio padrão 20,94
+round (var (dados_num$FREQUENCY), 2) #variância 438,45
+# Histograma
+hist(dados_num$FREQUENCY,main = "Histograma para Boxplot para Frequência (Hz)")
+#Mais valores de frequência na primeira metade 
+#contagem de cada frequência
+dados_num %>%
+  count(FREQUENCY)
+
+
+#ANÁLISE BIVARIADA
+# SIZE DISTANCE DESIBEL AIRFLOW FREQUENCY
+# Scatterplot Distância x Fluxo de ar
+
+plot(x = dados_num$DISTANCE , y = dados_num$AIRFLOW,
+     main = "Scatterplot - Distância x Fluxo de ar",
+     xlab = " Distância (cm)",
+     ylab = "Fluxo de ar (m/s)")
+
+
+# Scatterplot Intensidade do som x Frequência
+
+plot(x = dados_num$DESIBEL , y = dados_num$FREQUENCY,
+     main = "Scatterplot - Intensidade do som x Frequência",
+     xlab = " Intensidade do som (dB)",
+     ylab = " Frequência (Hz)")
+
+
+
+# Visualizando relacionamento entre as variáveis: Scatterplot
+pairs(dados_num[c("SIZE", "DISTANCE", "DESIBEL", "AIRFLOW", "FREQUENCY")])
+
+
+
+# CORRELAÇÃO
+# a correlação avalia somente variáveis numéricas
+
+
+L <- cor(dados_num)
+options(scipen = 100, digits = 2)#ajusta para duas casas decimais 
+#e tira da notação científica
+View(L)
+# criando mapa de correlação com números coloridos
+corrplot(L, method = 'number') 
+#fluxo de ar e distância tem alta correlação
+#frequência e intensidade sonora tem uma correlação positiva
+#altas correlações entre variaveis preditoras afetarão o modelo de ML
+
+```
+
+
+## Explorando as variáveis categóricas de interesse
+
+```{r}
+#Tabela de frequência e proporções desta tabela
+
+#FUEL
+table(dados_fator$FUEL)
+model_table <- table(dados_fator$FUEL)
+round(model_table, digits = 2)
+sort(prop.table(model_table), decreasing=TRUE)
+#gasoline  kerosene   thinner       lpg 
+#0.2941176 0.2941176 0.2941176 0.1176471 
+#lpg tem menos amostras
+
+
+#STATUS
+table(dados_fator$STATUS)
+model_table <- table(dados_fator$STATUS)
+round(model_table, digits = 3)
+sort(prop.table(model_table), decreasing=TRUE)
+#        0         1 
+#    0.5021786 0.4978214 
+# Ótimo. Classe da variável target já está balanceada
+
+
+#relacionamento entre variáveis categóricas
+CrossTable(x=dados_fator$FUEL, y=dados_fator$STATUS)
+
+```
+
+# Modelo Machine Learning
+
+## Modelo de Regressão logística
+
+```{r}
+#Padronização
+dados_num_norm <- scale(dados_num)
+dados_final <- cbind(dados_num_norm, dados_fator)
+dim(dados_final)
+View(dados_final)
+#juntando os dados
+
+#set.seed(101)
+#?sample.split
+amostra <- sample.split(dados_final$STATUS, SplitRatio = 0.70)
+# ***** Treinamos nosso modelo nos dados de treino *****
+# ***** Fazemos as predições nos dados de teste *****
+# Criando dados de treino - 70% dos dados
+treino = subset(dados_final, amostra == TRUE)
+# Criando dados de teste - 30% dos dados
+teste = subset(dados_final, amostra == FALSE)
+
+
+head(treino)
+head(teste)
+#vamos fazer o modelo base com regressão logística
+#vamos utilizar todas as variáveis
+
+# Separando os atributos e as classes
+test.feature.vars <- teste[,-7]
+test.class.var <- teste[,7]
+class(test.feature.vars)
+
+# Construindo o modelo de regressão logística
+formula.init <- "STATUS ~ ."
+formula.init <- as.formula(formula.init)
+help(glm)
+modelo_v1 <- glm(formula = formula.init, data = treino, family = "binomial")
+
+# Visualizando os detalhes do modelo
+summary(modelo_v1)
+
+#verificar como avaliar
+# Fazendo previsões e analisando o resultado
+previsoes <- predict(modelo_v1, teste, type = "response")
+previsoes <- round(previsoes)
+View(previsoes)
+
+# Confusion Matrix
+confusionMatrix(table(data = previsoes, reference = test.class.var), positive = '1')
+
+ #reference
+ #          data    0    1
+#    0            2396   293
+#    1            232  2312
+ 
+#Accuracy : 0.8997          
+#95% CI : (0.8912, 0.9077)
+#No Information Rate : 0.5022          
+#P-Value [Acc > NIR] : < 2.2e-16       
+ 
+#Kappa : 0.7993          
+ 
+#Mcnemar's Test P-Value : 0.008829        
+                                          
+#           Sensitivity : 0.8875          
+#           Specificity : 0.9117          
+#        Pos Pred Value : 0.9088          
+#        Neg Pred Value : 0.8910          
+#            Prevalence : 0.4978          
+#        Detection Rate : 0.4418          
+#  Detection Prevalence : 0.4861          
+#      Balanced Accuracy : 0.8996          
+#     'Positive' Class : 1               
+  
+
+```
+
+
+## Modelo de SVM
+
+```{r}
+#agora vamos fazer um modelo base com SVM
+#vamos utilizar todas as variáveis
+
+modelo_v2 <- svm(STATUS ~ ., data = treino, na.action = na.omit, scale = TRUE)
+summary(modelo_v2)
+
+ # Fazendo previsões com o modelo
+previsoes_v2 <- predict(modelo_v2, newdata = teste)
+ # Matriz de Confusão
+caret::confusionMatrix(previsoes_v2, teste$STATUS)
+#           Reference
+#Prediction    0    1
+#           0 2508 161
+#           1  120 2444
+
+#Accuracy : 0.9463          
+#95% CI : (0.9398, 0.9523)
+#No Information Rate : 0.5022          
+#P-Value [Acc > NIR] : < 2e-16         
+
+#Kappa : 0.8926          
+
+#Mcnemar's Test P-Value : 0.01702         
+                                          
+#            Sensitivity : 0.9543          
+#            Specificity : 0.9382          
+#         Pos Pred Value : 0.9397          
+#         Neg Pred Value : 0.9532          
+#            Prevalence : 0.5022          
+#         Detection Rate : 0.4793          
+#   Detection Prevalence : 0.5100          
+#      Balanced Accuracy : 0.9463          
+#       'Positive' Class : 0               
+                
+```
+
+## Modelo de Rede Neural 
+
+```{r}
+#vamos fazer o modelo base com Redes Neurais
+#só posso ter variáveis numéricas
+#Construindo o modelo de Redes Neurais
+
+set.seed(42)
+# Separar as variáveis de entrada e a variável alvo
+# a variável tipo fator FUEL não foi considerada
+x_treino <- treino[,-c(6,7)]  
+y_treino <- treino$STATUS
+
+x_teste <- teste[,-c(6,7)]
+y_teste <- teste$STATUS
+treino
+# Criar e treinar o modelo de rede neural
+modelo_v3 <- neuralnet(STATUS ~ .,         
+                        data = treino[,-6],# a variável tipo fator FUEL não foi considerada
+                        hidden = 1,     
+                        linear.output = FALSE,# Para classificação binária, defina como FALSE
+                        threshold=0.1
+                       )
+
+# Realizar previsões no conjunto de teste
+predictions <- predict(modelo_v3, newdata = x_teste)
+
+# Converter as previsões em rótulos binários
+predicted_labels <- ifelse(predictions > 0.5, 1, 0)
+
+#verificando tamanho das variáveis
+dim(predicted_labels)
+dim(y_teste)
+head(predicted_labels)
+head(y_teste)
+#pivot
+y_teste <- t(y_teste)
+# Calcular a matriz de confusão
+confusion_matrix <- table(Real = y_teste, Previsto = predicted_labels[,1])
+print(confusion_matrix)
+
+# Calcular a acurácia
+accuracy <- 1 - sum(diag(confusion_matrix)) / sum(confusion_matrix)
+print(paste("Acurácia:", round(accuracy, 4)))
+
+
+#       Previsto
+# Real    0     1
+#  0     255   2373
+#  1    2264    341
+
+#"Acurácia: 0.8861"
+
+
+print(modelo_v3)
+
+# Resumo do modelo
+str(modelo_v3)
+
+#coeficientes do modelo
+modelo_v3$result.matrix
+#visualização do modelo
+plot(modelo_v3)
+
+
+```
+
+## Modelo de Random Forest 
+
+```{r}
+#vamos fazer o modelo base com RandomForest
+#vamos utilizar todas as variáveis
+
+#?randomForest
+set.seed(123)
+modelo_v4 <- randomForest(STATUS ~ .,
+                          data = treino, 
+                          ntree = 25,
+                          nodesize = 5,
+                          importance = TRUE,
+                          proximity = TRUE,
+                          mtry = 8)
+print(modelo_v4)
+plot(modelo_v4) #20 árvores estabiliza o erro
+
+#Type of random forest:classification
+#Number of trees: 25
+#No. of variables tried at each split: 2
+#OOB estimate of  error rate: 4.59%
+#Confusion matrix:
+#    0    1   class.error
+#0 5906  225  0.03669874
+#1  336 5742  0.05528134 
+
+#verificando acuracia do modelo
+
+p1 <- predict(modelo_v4,teste)
+head(p1)
+head(teste$STATUS)
+
+confusionMatrix(p1,teste$STATUS)
+
+
+#Confusion Matrix and Statistics
+#Reference
+#Prediction    0    1
+#          0 2532  116
+#          1   96 2489
+
+#Accuracy : 0.9595          
+#95% CI : (0.9538, 0.9647)
+#No Information Rate : 0.5022          
+#P-Value [Acc > NIR] : <2e-16          
+
+#Kappa : 0.919           
+
+#Mcnemar's Test P-Value : 0.1919          
+                                          
+#            Sensitivity : 0.9635          
+#            Specificity : 0.9555          
+#         Pos Pred Value : 0.9562          
+ #        Neg Pred Value : 0.9629          
+#             Prevalence : 0.5022          
+#         Detection Rate : 0.4839          
+#   Detection Prevalence : 0.5060          
+#      Balanced Accuracy : 0.9595          
+                                          
+#       'Positive' Class : 0               
+                              
+#verificando as variáveis mais importantes
+varImpPlot(modelo_v4, 
+           sort = T,
+           n.var = 4,
+           main = "4 melhores variáveis para o modelo Random Forest"
+)
+
+#AIRFLOW, FREQUENCY e SIZE
+#lembrando que fluxo de ar e distância tem alta correlação, nem foi 
+#considerada a distância
+```
+
+## Modelo de Boosted Tree Decision 
+
+```{r}
+#agora vamos fazer um modelo base com BOOSTED DECISION TREE
+#vamos utilizar todas as variáveis
+
+#Construindo o modelo
+#?xgboost
+y <- dados_final$STATUS
+X <- dados_final %>% select(-STATUS)
+str(X)
+#só aceita valores numéricos
+#transforma fator em variável dummy
+X <- dummy_cols(X, remove_first_dummy = TRUE)
+dataset_xgboost <- cbind(X,y)
+#divisão em treino e teste
+split <- sample.split(dataset_xgboost, SplitRatio = 0.8)
+treino_xgboost <- subset(dataset_xgboost, split == TRUE)
+teste_xgboost <- subset(dataset_xgboost, split == FALSE)
+head(treino_xgboost)
+#isolar a variável target
+#train.y <- as.numeric(as.factor(train.y)) - 1
+treino.y <- treino_xgboost$y
+teste.y <- teste_xgboost$y
+#trocar a variável target de tipo fator para tipo numérico
+treino.y <- as.numeric(treino.y) - 1
+teste.y <- as.numeric(teste.y) - 1
+View(treino.y)
+#isolar a variável X (que tem que ser tipo de matriz neste algoritmo)
+View(treino_xgboost)
+View(teste_xgboost)
+#colocar a coluna FUEL no final do treino_xgboost e teste_xgboost
+treino_xgboost <- treino_xgboost %>% relocate(FUEL, .after=FUEL_thinner)
+teste_xgboost <- teste_xgboost %>% relocate(FUEL, .after=FUEL_thinner)
+View(treino_xgboost)
+View(teste_xgboost)
+treino.x <- data.matrix(treino_xgboost[,1:8])
+teste.x <- data.matrix(teste_xgboost[,1:8])
+str(treino.x)
+#configurando os parâmetros
+params <- list(eta = 0.3, max_depth = 6, 
+               subsample = 1,
+               colsample_bytree=1,
+               min_child_weight= 1,
+               gamma = 0,
+               eval_metric = "auc", 
+               objective = "binary:logistic",
+               booster = "gbtree")
+#?params
+#?xgboost
+modelo_v5 <- xgboost(data = treino.x, label = treino.y, 
+                 params = params, 
+                 set_seed = 102,
+                 nround = 20,
+                 verbose = 1)
+
+#avaliando o modelo
+pred <- predict(modelo_v5, newdata = teste.x)
+pred <- ifelse (pred >0.5, 1, 0)
+#verificando acurácia
+confusionMatrix(table(pred,teste.y))
+
+#Confusion Matrix and Statistics
+
+        #teste.y
+#pred    0    1
+#    0   1695 77
+#    1   52  1664
+
+#Accuracy : 0.963           
+#95% CI : (0.9562, 0.969)
+#No Information Rate : 0.5009          
+#P-Value [Acc > NIR] : < 2e-16         
+
+#Kappa : 0.926          
+
+#Mcnemar's Test P-Value : 0.03459        
+                                          
+#            Sensitivity : 0.9702          
+#            Specificity : 0.9558          
+#         Pos Pred Value : 0.9565          
+#         Neg Pred Value : 0.9697          
+ #            Prevalence : 0.5009          
+#         Detection Rate : 0.4860          
+#   Detection Prevalence : 0.5080          
+ #     Balanced Accuracy : 0.9630          
+                                          
+ #      'Positive' Class : 0               
+                                   
+#verificando as variáveis mais importantes
+xgb.plot.shap(data = teste.x, model = modelo_v5, top_n = 4)
+#AIRFLOW, SIZE, FREQUENCY (mesmas variáveis do Random Forest)
+
+# Criando a Matriz de Importância de Atributos
+importance_matrix <- xgb.importance(model = modelo_v5)
+print(importance_matrix)
+
+
+#Feature        Gain       Cover  Frequency
+#1:       AIRFLOW 0.649040532 0.336452008 0.12953368
+#2:          SIZE 0.111807716 0.152829330 0.27253886
+#3:     FREQUENCY 0.100103604 0.227680857 0.22901554
+#4:      DISTANCE 0.087935173 0.217312320 0.18652850
+#5: FUEL_kerosene 0.025218938 0.034492932 0.07150259
+#6:  FUEL_thinner 0.020883377 0.025510085 0.07046632
+#7:       DESIBEL 0.005010661 0.005722469 0.04041451
+
+
+# Plot
+xgb.plot.importance(importance_matrix = importance_matrix)
+
+
+#DECISÃO A TOMAR SOBRE COM QUAL ALGORITMO SEGUIR PARA AJUSTE DE PARÂMETROS
+#RESUMO:
+
+#modelo_v1 Acurácia 0.8997 modelo Regressão Logística
+#modelo_v2 Acurácia 0.9463 modelo SVM
+#modelo_v3 Acurácia 0.886  modelo Neural Net
+#modelo_v4 Acurácia 0.9595 modelo Random Forest
+#modelo_v5 Acurácia 0.963  modelo XG BOOST
+
+#Muito embora, o melhor resultado até o momento tenha sido o XGBOOST ele é muito complexo.
+#Devemos buscar um modelo mais simples.
+#Por esta razão, escolhi o modelo Random Forest para continuidade do projeto.
+
+#vamos remover o que nao utilizaremos mais economizando memória
+rm(df_original,modelo_v1,modelo_v2,modelo_v3, modelo_v4, modelo_v5, dataset_xgboost, treino_xgboost,
+   teste_xgboost)
+
+```
+
+# Otimização de Modelo de Machine Learning
+
+```{r}
+
+View(treino)
+#vamos manter somente as variáveis mais relevantes para a otimização do modelo
+excluir <- c("DISTANCE", "DESIBEL","FUEL")
+treino_final <- treino[,!(names(treino)%in% excluir)]
+teste_final <- teste[,!(names(teste)%in% excluir)]
+
+#vamos remover o que nao utilizaremos mais economizando memória
+rm(treino,teste)
+
+set.seed(123)
+modelo_v6 <- randomForest(STATUS ~ .,
+                          data = treino_final, 
+                          ntree = 25,
+                          nodesize = 5,
+                          importance = TRUE,
+                          proximity = TRUE,
+                          mtry = 8)
+print(modelo_v6)
+plot(modelo_v6) #15 árvores estabiliza o erro
+
+#Type of random forest:classification
+#Number of trees: 25
+#No. of variables tried at each split: 2
+#OOB estimate of  error rate: 4.59%
+#Confusion matrix:
+#    0    1   class.error
+#0 5906  225  0.03669874
+#1  336 5742  0.05528134 
+
+#verificando acuracia do modelo
+
+p1 <- predict(modelo_v6,teste_final)
+head(p1)
+head(teste_final$STATUS)
+confusionMatrix(p1,teste_final$STATUS)
+#Accuracy : 0.916 
+
+# Definindo a grade de hiperparâmetros para otimizar o modelo
+#mtry é Número de variáveis a serem amostradas em cada divisão
+#ntree é Número de árvores no modelo Random Forest
+
+
+#Ajustando hiperparâmetro
+
+# Definir o controle de treinamento (cross-validation)
+ctrl <- trainControl(method = "cv",    # Método de validação cruzada
+                     number = 5,       # Número de folds para cross-validation
+                     verboseIter = TRUE)  # Exibir informações durante a otimização
+
+# Definir a grade de parâmetros para otimização
+grid <- expand.grid(mtry = c(2, 3, 4))      # Variando o número de features para cada split
+                   
+
+# Treinar o modelo de Random Forest
+rf_model <- train(STATUS ~ .,         # Fórmula de predição (altere de acordo com seus dados)
+                  data = dados_final,         # Conjunto de dados
+                  method = "rf",       # Algoritmo a ser usado (Random Forest)
+                  trControl = ctrl,    # Controle de treinamento
+                  tuneGrid = grid)     # Grade de parâmetros a ser otimizada
+
+# Exibir resultados do modelo otimizado
+print(rf_model)
+#melhor é mtry=4
+
+# Plotar importância das variáveis
+varImp(rf_model)
+
+
+modelo_final <- randomForest(STATUS ~ .,
+                          data = treino_final, 
+                          ntree = 25,
+                          nodesize = 5,
+                          importance = TRUE,
+                          proximity = TRUE,
+                          mtry = 4)
+print(modelo_final)
+plot(modelo_final)
+
+modelo_final <- randomForest(STATUS ~ .,
+                             data = teste_final, 
+                             ntree = 25,
+                             nodesize = 5,
+                             importance = TRUE,
+                             proximity = TRUE,
+                             mtry = 4)
+print(modelo_final)
+plot(modelo_final)
+
+pfinal <- predict(modelo_final,teste_final)
+head(pfinal)
+head(teste_final$STATUS)
+
+confusionMatrix(pfinal,teste_final$STATUS)
+#modelo final com acurácia de 96,1%
+
+```
