@@ -1,5 +1,5 @@
 # Previsão se a chama será extinta ou não ao usar um extintor de incêndio
-[![NPM](https://img.shields.io/npm/l/react)](https://github.com/DaniloTAbreu/Projeto1/blob/main/LICENSE) 
+[![NPM](https://img.shields.io/npm/l/react)](https://github.com/DaniloTAbreu/Projeto2/blob/main/LICENSE) 
 
 # Sobre o projeto
 
